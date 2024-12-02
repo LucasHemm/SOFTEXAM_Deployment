@@ -1,0 +1,449 @@
+services:
+  frontend:
+    image: lucashemcph/soft1exam_mtogofrontend:latest
+    container_name: my-react-app
+    ports:
+      - "80:80"
+    restart: always
+    networks:
+      - mtogo-network
+      
+  # Order and Feedback Service
+  orderandfeedback_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: orderandfeedbackservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1434:1433"
+    volumes:
+      - orderandfeedback_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  orderandfeedback_app:
+    image: lucashemcph/soft1exam_orderandfeedbackservice:latest
+    container_name: orderandfeedbackservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=orderandfeedbackservicedb;Database=orderservicedb;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+      - RabbitMQ__HostName=rabbitmqnotification
+      - RabbitMQ__UserName=guest
+      - RabbitMQ__Password=guest
+      - RabbitMQ__Port=5672
+    ports:
+      - "8080:8080"
+    depends_on:
+      orderandfeedback_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  orderandfeedback_prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_orderandfeedback
+    volumes:
+      - ./prometheus_orderandfeedback.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - mtogo-network
+
+  orderandfeedback_grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_orderandfeedback
+    ports:
+      - "3000:3000"
+    volumes:
+      - orderandfeedback_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Notification Broker Service
+  notification_broker_app:
+    image: lucashemcph/soft1exam_notificationservice:latest
+    container_name: notificationbrokerservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmqnotification
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+      - SendGrid__ApiKey=testy
+      - SendGrid__FromEmail=test@test.com
+    ports:
+      - "8086:8080"
+    depends_on:
+      notification_rabbitmq:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  notification_rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmqnotification
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mtogo-network
+
+  notification_prometheus:
+    image: prom/prometheus:latest
+    container_name: notificationprometheus
+    volumes:
+      - ./prometheus_notification.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9096:9090"
+    networks:
+      - mtogo-network
+
+  notification_grafana:
+    image: grafana/grafana:latest
+    container_name: notificationgrafana
+    ports:
+      - "3006:3000"
+    volumes:
+      - notification_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Customer Service
+  customer_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: customerservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1437:1433"
+    volumes:
+      - customer_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  customer_app:
+    image: lucashemcph/soft1exam_customerservice:latest
+    container_name: customerservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=customerservicedb;Database=customerdb;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+    ports:
+      - "8083:8080"
+    depends_on:
+      customer_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  customer_prometheus:
+    image: prom/prometheus:latest
+    container_name: customerprometheus
+    volumes:
+      - ./prometheus_customer.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9093:9090"
+    networks:
+      - mtogo-network
+
+  customer_grafana:
+    image: grafana/grafana:latest
+    container_name: customergrafana
+    ports:
+      - "3003:3000"
+    volumes:
+      - customer_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Restaurant Service
+  restaurant_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: restaurantservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1439:1433"
+    volumes:
+      - restaurant_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  restaurant_app:
+    image: lucashemcph/soft1exam_restaurantservice:latest
+    container_name: restaurantservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=restaurantservicedb;Database=restaurantservice;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+    ports:
+      - "8085:8080"
+    depends_on:
+      restaurant_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  restaurant_prometheus:
+    image: prom/prometheus:latest
+    container_name: restaurantserviceprometheus
+    volumes:
+      - ./prometheus_restaurantservice.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9095:9090"
+    networks:
+      - mtogo-network
+
+  restaurant_grafana:
+    image: grafana/grafana:latest
+    container_name: restaurantservicegrafana
+    ports:
+      - "3005:3000"
+    volumes:
+      - restaurant_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Payment Service
+  payment_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: paymentservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1438:1433"
+    volumes:
+      - payment_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  payment_app:
+    image: lucashemcph/soft1exam_paymentservice:latest
+    container_name: paymentservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=paymentservicedb;Database=paymentservice;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+    ports:
+      - "8084:8080"
+    depends_on:
+      payment_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  payment_prometheus:
+    image: prom/prometheus:latest
+    container_name: paymentserviceprometheus
+    volumes:
+      - ./prometheus_paymentservice.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9094:9090"
+    networks:
+      - mtogo-network
+
+  payment_grafana:
+    image: grafana/grafana:latest
+    container_name: paymentservicegrafana
+    ports:
+      - "3004:3000"
+    volumes:
+      - payment_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Agent Service
+  agent_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: agentservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1435:1433"
+    volumes:
+      - agent_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  agent_app:
+    image: lucashemcph/soft1exam_agentservice:latest
+    container_name: agentservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=agentservicedb;Database=agentdb;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+    ports:
+      - "8081:8080"
+    depends_on:
+      agent_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  agent_prometheus:
+    image: prom/prometheus:latest
+    container_name: agentserviceprometheus
+    volumes:
+      - ./prometheus_agentservice.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9091:9090"
+    networks:
+      - mtogo-network
+
+  agent_grafana:
+    image: grafana/grafana:latest
+    container_name: agentservicegrafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - agent_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # User Service
+  user_db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: userservicedb
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=yourStrong(!)Password
+    ports:
+      - "1436:1433"
+    volumes:
+      - user_sql_data:/var/opt/mssql
+    networks:
+      - mtogo-network
+    healthcheck:
+      test: [ "CMD-SHELL", "grep 'SQL Server is now ready for client connections' /var/opt/mssql/log/errorlog || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  user_app:
+    image: lucashemcph/soft1exam_userservice:latest
+    container_name: userservicecontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=userservicedb;Database=Userdb;User Id=sa;Password=yourStrong(!)Password;TrustServerCertificate=True;
+    ports:
+      - "8082:8080"
+    depends_on:
+      user_db:
+        condition: service_healthy
+    networks:
+      - mtogo-network
+
+  user_prometheus:
+    image: prom/prometheus:latest
+    container_name: userprometheus
+    volumes:
+      - ./prometheus_userservice.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9092:9090"
+    networks:
+      - mtogo-network
+
+  user_grafana:
+    image: grafana/grafana:latest
+    container_name: userservicegrafana
+    ports:
+      - "3002:3000"
+    volumes:
+      - user_grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+  # Main Application Service
+  app:
+    image: lucashemcph/soft1exam_mtogobackend:latest
+    container_name: mtogobackendcontainer
+    environment:
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "8087:8080"
+    networks:
+      - mtogo-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: mtogobackendprometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9097:9090"
+    networks:
+      - mtogo-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: mtogobackendgrafana
+    ports:
+      - "3007:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - mtogo-network
+
+volumes:
+  orderandfeedback_sql_data:
+  orderandfeedback_grafana_data:
+  notification_sql_data:
+  notification_grafana_data:
+  customer_sql_data:
+  customer_grafana_data:
+  restaurant_sql_data:
+  restaurant_grafana_data:
+  payment_sql_data:
+  payment_grafana_data:
+  agent_sql_data:
+  agent_grafana_data:
+  user_sql_data:
+  user_grafana_data:
+  grafana_data:
+
+
+networks:
+  mtogo-network:
+    driver: bridge
