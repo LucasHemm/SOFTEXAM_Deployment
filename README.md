@@ -10,6 +10,7 @@
     - [List of Microservices](#list-of-microservices)
     - [Back and Frontend](#back-and-frontend)
     - [External services:](#external-services)
+  - [CI steps](#ci-steps)
   - [Metrics](#metrics)
   - [Docker Compose](#docker-compose)
     - [Overview](#overview)
@@ -46,6 +47,17 @@ In addition to the microservices, the project also includes the following servic
 - **RabbitMQ**: Message broker used for communication between microservices.
 - **SendGrid**: Email service used for sending notifications.
 
+## CI steps
+Det første step i vores CI, når en ny feature var lavet færdig, var altid at igangsætte en pull request. Dette gjorde vi for at beskytte main branchen igennem branch rules, således at workflow filen skulle have kørt uden problemer, før et merge måtte forekomme. Og for at vi kunne review hinandens kode inden det blev merget.
+Så snart pull request var igangsat, startede vores workflow-fil.
+
+
+Denne fil var kernen i vores pipeline. Som det første byggede den projektet med vores nuget pakker. Derefter i vores pipeline blev hele test-suiten kørt. Dette var super vigtigt for, at vi sikrede os, at kode kvaliteten forblev høj. Dette var også vores primære måde at regressionsteste vores kode. Alle vores test såsom unit, integration, API og specification blev kørt i dette step. Hvis alle test var godkendt og der ingen fejl var her, kunne CD delen af vores pipeline starte, som vil uddybes i næste afsnit.
+
+Hvis alt gik godt og workflow-filen gik igennem uden problemer, kom det sidste led i vores CI, eftersom at vores branch nu kunne tillade et merge.
+
+Det sidste step bestod i at dobbelttjekke med hinanden i udvikler-teamet, igennem et kort code review. Hvis også der her blev givet en bekræftelse fra de øvrige medlemmer, mergede vi det ind. 
+Denne proces for CI var konsekvent gennem hele udviklingen af projektet, og gjorde vores arbejde som udviklere i stor grad nemmere og mere effektivt da det først var sat op.
 
 
 ## Metrics
